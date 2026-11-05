@@ -17,6 +17,7 @@ import LogoutModal from './components/LogoutModal';
 import LoginForm from './components/LoginForm';
 import RegisterForm from './components/RegisterForm';
 import ConCompanion from './components/ConCompanion';
+import CosplayChat from './components/CosplayChat';
 
 // Brand logo asset
 import coslifeLogo from './assets/cos_logo.png'; 
@@ -220,6 +221,7 @@ export default function App() {
         {activeTab === 'scaler' && <PropScaler />}
         {activeTab === 'vault' && <BlueprintVault />}
         {activeTab === 'companion' && <ConCompanion />}
+        {activeTab === 'companion' && <CosplayChat />}
       </main>
 
       <ProfileModal 
