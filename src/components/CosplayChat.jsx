@@ -46,21 +46,26 @@ export default function CosplayChat() {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !currentUser) return;
+    const messageText = newMessage.trim();
+    if (!messageText || !currentUser) return;
+
+    // ⚡ Clear input immediately so it's ready for the next message
+    setNewMessage('');
 
     try {
       await addDoc(collection(db, 'chat_messages'), {
-        text: newMessage.trim(),
+        text: messageText,
         createdAt: serverTimestamp(),
         uid: currentUser.uid,
         displayName: currentUser.displayName || 'Anonymous Cosplayer',
         photoURL: currentUser.photoURL || '',
       });
 
-      setNewMessage('');
       scrollToBottom();
     } catch (error) {
       console.error('Error sending message:', error);
+      // Restore input text if the request fails
+      setNewMessage(messageText);
     }
   };
 
