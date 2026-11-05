@@ -22,7 +22,7 @@ export default function CosplayChat() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showOnlineList, setShowOnlineList] = useState(false);
   
-  // DM state: null = Global Chat, otherwise target user object { uid, displayName, photoURL }
+  // DM state: null = Community Lounge (Public), otherwise target user object { uid, displayName, photoURL }
   const [activeDMUser, setActiveDMUser] = useState(null);
 
   const messagesEndRef = useRef(null);
@@ -91,6 +91,7 @@ export default function CosplayChat() {
     const messageText = newMessage.trim();
     if (!messageText || !currentUser) return;
 
+    // Clear input field immediately
     setNewMessage('');
     setShowEmojiPicker(false);
 
@@ -137,6 +138,7 @@ export default function CosplayChat() {
       {/* Header */}
       <div className="p-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
         {activeDMUser ? (
+          /* Private DM Header Space */
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveDMUser(null)}
@@ -152,12 +154,13 @@ export default function CosplayChat() {
             />
             <div>
               <h2 className="text-xs font-bold text-slate-100 flex items-center gap-1">
-                DM: {activeDMUser.displayName}
+                {activeDMUser.displayName}
               </h2>
               <p className="text-[9px] text-amber-400 font-semibold">Private Conversation</p>
             </div>
           </div>
         ) : (
+          /* Public Lounge Header */
           <div className="flex items-center gap-2">
             <MessageSquare className="w-5 h-5 text-amber-500 shrink-0" />
             <div>
@@ -184,7 +187,7 @@ export default function CosplayChat() {
         <div className="absolute inset-x-0 top-12 z-20 bg-slate-950/95 backdrop-blur border-b border-slate-800 p-3 shadow-2xl max-h-48 overflow-y-auto">
           <div className="flex items-center justify-between mb-2 pb-1 border-b border-slate-800">
             <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-              <Circle className="w-2 h-2 text-emerald-400 fill-emerald-400" /> Active Cosplayers Online
+              <Circle className="w-2 h-2 text-emerald-400 fill-emerald-400" /> Active Cosplayers Online ({onlineUsers.length})
             </span>
             <button onClick={() => setShowOnlineList(false)} className="text-slate-400 hover:text-white">
               <X className="w-3.5 h-3.5" />
@@ -203,7 +206,7 @@ export default function CosplayChat() {
                     }
                   }}
                   className={`flex items-center justify-between p-1.5 rounded-xl transition ${
-                    isMe ? 'opacity-60 cursor-default' : 'hover:bg-slate-800 cursor-pointer'
+                    isMe ? 'opacity-60 cursor-default bg-slate-900/50' : 'hover:bg-slate-800 cursor-pointer'
                   }`}
                 >
                   <div className="flex items-center gap-2">
@@ -250,21 +253,21 @@ export default function CosplayChat() {
                   isMe ? 'ml-auto flex-row-reverse' : 'mr-auto'
                 }`}
               >
-                {/* Avatar with DM trigger */}
+                {/* Avatar: Direct Message Trigger */}
                 <button
                   disabled={isMe}
                   onClick={() => setActiveDMUser({ uid: msg.uid, displayName: msg.displayName, photoURL: msg.photoURL })}
-                  className={`relative ${!isMe ? 'hover:opacity-80 transition cursor-pointer' : ''}`}
+                  className={`relative shrink-0 ${!isMe ? 'hover:opacity-80 transition cursor-pointer' : 'cursor-default'}`}
                   title={!isMe ? `Direct message ${msg.displayName}` : ''}
                 >
                   {msg.photoURL ? (
                     <img
                       src={msg.photoURL}
                       alt={msg.displayName}
-                      className="w-6 h-6 rounded-full shrink-0 border border-slate-700 mt-1 object-cover"
+                      className="w-6 h-6 rounded-full border border-slate-700 mt-1 object-cover"
                     />
                   ) : (
-                    <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center shrink-0 mt-1">
+                    <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center mt-1">
                       <User className="w-3.5 h-3.5 text-slate-400" />
                     </div>
                   )}
@@ -318,7 +321,7 @@ export default function CosplayChat() {
         <button
           type="button"
           onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-          className="text-slate-400 hover:text-amber-400 p-1.5 hover:bg-slate-800 rounded-xl transition"
+          className="text-slate-400 hover:text-amber-400 p-1.5 hover:bg-slate-800 rounded-xl transition shrink-0"
           title="Add Emoji"
         >
           <Smile className="w-4 h-4" />
