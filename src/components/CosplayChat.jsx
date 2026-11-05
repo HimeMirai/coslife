@@ -10,7 +10,6 @@ import {
   serverTimestamp,
   doc,
   setDoc,
-  where
 } from 'firebase/firestore';
 import { Send, MessageSquare, User, ShieldCheck, Smile, Users, X, ArrowLeft, Circle } from 'lucide-react';
 
