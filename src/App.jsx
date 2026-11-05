@@ -4,6 +4,7 @@ import {
   Ruler, 
   FileBox, 
   MapPin, 
+  MessageSquare,
   LogOut,
   Settings
 } from 'lucide-react';
@@ -213,6 +214,16 @@ export default function App() {
           >
             <MapPin className="w-4 h-4" /> Con Companion
           </button>
+          <button
+            onClick={() => setActiveTab('chat')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
+              activeTab === 'chat'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" /> Community Lounge
+          </button>
         </div>
       </nav>
 
@@ -221,7 +232,7 @@ export default function App() {
         {activeTab === 'scaler' && <PropScaler />}
         {activeTab === 'vault' && <BlueprintVault />}
         {activeTab === 'companion' && <ConCompanion />}
-        {activeTab === 'companion' && <CosplayChat />}
+        {activeTab === 'chat' && <CosplayChat />}
       </main>
 
       <ProfileModal 
