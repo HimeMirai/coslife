@@ -64,6 +64,12 @@ export default function CosplayChat() {
     }
   };
 
+  const formatMessageTime = (createdAt) => {
+    if (!createdAt) return '';
+    const date = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
     <div className="w-full max-w-4xl mx-auto bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
       {/* Header */}
@@ -78,9 +84,9 @@ export default function CosplayChat() {
         {currentUser && (
           <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-800">
             <img 
-              src={currentUser.photoURL || 'https://via.placeholder.com/30'} 
+              src={currentUser.photoURL || 'https://api.dicebear.com/7.x/bottts/svg?seed=Cosplayer1'} 
               alt="Avatar" 
-              className="w-5 h-5 rounded-full"
+              className="w-5 h-5 rounded-full object-cover"
             />
             <span className="text-xs text-slate-300 font-medium">{currentUser.displayName}</span>
           </div>
@@ -114,7 +120,7 @@ export default function CosplayChat() {
                   <img
                     src={msg.photoURL}
                     alt={msg.displayName}
-                    className="w-7 h-7 rounded-full shrink-0 border border-slate-700 mt-1"
+                    className="w-7 h-7 rounded-full shrink-0 border border-slate-700 mt-1 object-cover"
                   />
                 ) : (
                   <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center shrink-0 mt-1">
@@ -136,6 +142,11 @@ export default function CosplayChat() {
                   >
                     {msg.text}
                   </div>
+                  {msg.createdAt && (
+                    <span className={`text-[9px] text-slate-500 mt-0.5 px-1 ${isMe ? 'text-right' : 'text-left'}`}>
+                      {formatMessageTime(msg.createdAt)}
+                    </span>
+                  )}
                 </div>
               </div>
             );
