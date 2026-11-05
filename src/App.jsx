@@ -6,7 +6,8 @@ import {
   MapPin, 
   MessageSquare,
   LogOut,
-  Settings
+  Settings,
+  X
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, updateProfile } from 'firebase/auth';
 import { auth, googleProvider } from './firebase';
@@ -30,6 +31,9 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  
+  // State for the Chat Pop-up Modal
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -135,8 +139,8 @@ export default function App() {
 
   // ✅ LOGGED IN WORKSPACE
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans relative">
+      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src={coslifeLogo} alt="CosLife Logo" className="h-9 w-9 object-cover rounded-lg border border-rose-500/30" />
@@ -172,6 +176,7 @@ export default function App() {
         </div>
       </header>
 
+      {/* Main Navigation Tabs */}
       <nav className="border-b border-slate-800 bg-slate-900/40">
         <div className="max-w-7xl mx-auto px-4 flex overflow-x-auto gap-2 py-2">
           <button
@@ -214,26 +219,53 @@ export default function App() {
           >
             <MapPin className="w-4 h-4" /> Con Companion
           </button>
-          <button
-            onClick={() => setActiveTab('chat')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
-              activeTab === 'chat'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            <MessageSquare className="w-4 h-4" /> Community Lounge
-          </button>
         </div>
       </nav>
 
+      {/* Active Tab View */}
       <main className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full">
         {activeTab === 'studio' && <CraftingStudio />}
         {activeTab === 'scaler' && <PropScaler />}
         {activeTab === 'vault' && <BlueprintVault />}
         {activeTab === 'companion' && <ConCompanion />}
-        {activeTab === 'chat' && <CosplayChat />}
       </main>
+
+      {/* 💬 FLOATING MESSAGING BUTTON (Bottom Right) */}
+      <div className="fixed bottom-6 right-6 z-50">
+        {!isChatOpen ? (
+          <button
+            onClick={() => setIsChatOpen(true)}
+            className="bg-amber-500 hover:bg-amber-400 text-slate-950 p-3.5 sm:p-4 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-105 flex items-center justify-center group"
+            title="Open Cosplayer Community Chat"
+          >
+            <MessageSquare className="w-6 h-6" />
+            <span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs transition-all duration-300 ease-in-out text-xs font-bold pl-0 group-hover:pl-2">
+              Community Chat
+            </span>
+          </button>
+        ) : (
+          /* POPUP CHAT WINDOW */
+          <div className="w-[90vw] sm:w-[400px] h-[520px] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-200">
+            {/* Pop-up Close Bar */}
+            <div className="bg-slate-950 px-4 py-2 flex items-center justify-between border-b border-slate-800">
+              <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5" /> Cosplayer Lounge
+              </span>
+              <button
+                onClick={() => setIsChatOpen(false)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Embedded CosplayChat Component */}
+            <div className="flex-1 overflow-hidden">
+              <CosplayChat />
+            </div>
+          </div>
+        )}
+      </div>
 
       <ProfileModal 
         isOpen={isProfileModalOpen} 

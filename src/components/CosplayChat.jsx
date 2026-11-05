@@ -71,30 +71,30 @@ export default function CosplayChat() {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
+    <div className="w-full h-full bg-slate-900 flex flex-col justify-between overflow-hidden">
       {/* Header */}
-      <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <MessageSquare className="w-6 h-6 text-amber-500" />
+      <div className="p-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="w-5 h-5 text-amber-500 shrink-0" />
           <div>
-            <h2 className="text-base font-bold text-slate-100">Cosplayer Community Lounge</h2>
-            <p className="text-xs text-slate-400">Connect, coordinate, and chat in real-time</p>
+            <h2 className="text-xs font-bold text-slate-100">Community Lounge</h2>
+            <p className="text-[10px] text-slate-400">Chat & coordinate in real-time</p>
           </div>
         </div>
         {currentUser && (
-          <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-800">
+          <div className="flex items-center gap-1.5 bg-slate-900 px-2 py-1 rounded-full border border-slate-800">
             <img 
               src={currentUser.photoURL || 'https://api.dicebear.com/7.x/bottts/svg?seed=Cosplayer1'} 
               alt="Avatar" 
-              className="w-5 h-5 rounded-full object-cover"
+              className="w-4 h-4 rounded-full object-cover"
             />
-            <span className="text-xs text-slate-300 font-medium">{currentUser.displayName}</span>
+            <span className="text-[10px] text-slate-300 font-medium truncate max-w-[80px]">{currentUser.displayName}</span>
           </div>
         )}
       </div>
 
       {/* Messages Feed */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-900/50">
+      <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-900/50">
         {!currentUser ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-400 text-xs">
             <ShieldCheck className="w-8 h-8 text-amber-500 mb-2" />
@@ -111,7 +111,7 @@ export default function CosplayChat() {
             return (
               <div
                 key={msg.id}
-                className={`flex items-start gap-2 max-w-[80%] ${
+                className={`flex items-start gap-1.5 max-w-[85%] ${
                   isMe ? 'ml-auto flex-row-reverse' : 'mr-auto'
                 }`}
               >
@@ -120,21 +120,21 @@ export default function CosplayChat() {
                   <img
                     src={msg.photoURL}
                     alt={msg.displayName}
-                    className="w-7 h-7 rounded-full shrink-0 border border-slate-700 mt-1 object-cover"
+                    className="w-6 h-6 rounded-full shrink-0 border border-slate-700 mt-1 object-cover"
                   />
                 ) : (
-                  <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center shrink-0 mt-1">
-                    <User className="w-4 h-4 text-slate-400" />
+                  <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center shrink-0 mt-1">
+                    <User className="w-3.5 h-3.5 text-slate-400" />
                   </div>
                 )}
 
                 {/* Bubble */}
                 <div className="flex flex-col">
-                  <span className={`text-[10px] text-slate-400 mb-0.5 px-1 ${isMe ? 'text-right' : 'text-left'}`}>
+                  <span className={`text-[9px] text-slate-400 mb-0.5 px-1 ${isMe ? 'text-right' : 'text-left'}`}>
                     {msg.displayName}
                   </span>
                   <div
-                    className={`px-3 py-2 rounded-2xl text-xs sm:text-sm break-words ${
+                    className={`px-3 py-1.5 rounded-2xl text-xs break-words ${
                       isMe
                         ? 'bg-amber-500 text-slate-950 font-medium rounded-tr-none'
                         : 'bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700'
@@ -143,7 +143,7 @@ export default function CosplayChat() {
                     {msg.text}
                   </div>
                   {msg.createdAt && (
-                    <span className={`text-[9px] text-slate-500 mt-0.5 px-1 ${isMe ? 'text-right' : 'text-left'}`}>
+                    <span className={`text-[8px] text-slate-500 mt-0.5 px-1 ${isMe ? 'text-right' : 'text-left'}`}>
                       {formatMessageTime(msg.createdAt)}
                     </span>
                   )}
@@ -156,21 +156,21 @@ export default function CosplayChat() {
       </div>
 
       {/* Message Input Bar */}
-      <form onSubmit={handleSendMessage} className="p-3 bg-slate-950 border-t border-slate-800 flex gap-2">
+      <form onSubmit={handleSendMessage} className="p-2 bg-slate-950 border-t border-slate-800 flex gap-2">
         <input
           type="text"
           disabled={!currentUser}
           placeholder={currentUser ? "Type a message..." : "Sign in to chat..."}
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
-          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-amber-500 disabled:opacity-50"
+          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500 disabled:opacity-50"
         />
         <button
           type="submit"
           disabled={!currentUser || !newMessage.trim()}
-          className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1 transition disabled:opacity-50"
+          className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center transition disabled:opacity-50 shrink-0"
         >
-          <Send className="w-4 h-4" />
+          <Send className="w-3.5 h-3.5" />
         </button>
       </form>
     </div>
