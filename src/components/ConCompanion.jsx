@@ -4,9 +4,9 @@ import { MapPin, Calendar as CalendarIcon, CheckSquare, Plus, Trash2, Clock, Che
 const DEFAULT_CONVENTIONS = [
   {
     id: 1,
-    name: 'Comic Convention 2026',
+    name: 'Bohol Cosplay Convention 2026',
     date: '2026-11-20',
-    location: 'San Diego Convention Center',
+    location: 'Tagbilaran City, Bohol, Philippines',
     cosplayPlanned: 'Cyberpunk Armor'
   }
 ];
@@ -42,8 +42,10 @@ export default function ConCompanion() {
   const [conLocation, setConLocation] = useState('');
   const [conCosplay, setConCosplay] = useState('');
 
-  // Map preview active selection
-  const [activeMapQuery, setActiveMapQuery] = useState(DEFAULT_CONVENTIONS[0]?.location || 'San Diego Convention Center');
+  // Map preview active selection (defaults to Bohol)
+  const [activeMapQuery, setActiveMapQuery] = useState(
+    DEFAULT_CONVENTIONS[0]?.location || 'Tagbilaran City, Bohol, Philippines'
+  );
 
   // Custom Calendar Picker States
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -80,7 +82,7 @@ export default function ConCompanion() {
       id: Date.now(),
       name: conName.trim(),
       date: conDate,
-      location: conLocation.trim() || 'Convention Center',
+      location: conLocation.trim() || 'Tagbilaran City, Bohol',
       cosplayPlanned: conCosplay.trim() || 'TBD'
     };
 
@@ -171,7 +173,7 @@ export default function ConCompanion() {
               <input
                 type="text"
                 required
-                placeholder="e.g. Comic-Con / Anime Expo"
+                placeholder="e.g. Bohol Pop Con / Otaku Expo"
                 value={conName}
                 onChange={(e) => setConName(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:border-amber-500"
@@ -248,7 +250,7 @@ export default function ConCompanion() {
                 <label className="text-xs text-slate-400 font-medium block mb-1">Venue / City Location</label>
                 <input
                   type="text"
-                  placeholder="e.g. San Diego Convention Center"
+                  placeholder="e.g. Tagbilaran City, Bohol"
                   value={conLocation}
                   onChange={(e) => setConLocation(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-amber-500"
@@ -297,7 +299,7 @@ export default function ConCompanion() {
                           <h4 className="font-bold text-sm text-slate-100">{con.name}</h4>
                           <button 
                             onClick={() => setActiveMapQuery(con.location)}
-                            className="text-xs text-amber-400 hover:underline flex items-center gap-1 mt-0.5"
+                            className="text-xs text-amber-400 hover:underline flex items-center gap-1 mt-0.5 text-left"
                             title="Click to view on Map"
                           >
                             <MapPin className="w-3 h-3 text-rose-400 shrink-0" /> {con.location}
@@ -342,7 +344,7 @@ export default function ConCompanion() {
               </div>
             </div>
 
-            {/* Embedded Map Frame */}
+            {/* Embedded Map Frame centered on Bohol */}
             <div className="relative w-full h-64 sm:h-80 rounded-2xl overflow-hidden border border-slate-800 bg-slate-950">
               <iframe
                 title="Convention Venue Map"
