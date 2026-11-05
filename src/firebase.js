@@ -6,9 +6,9 @@ import { getAnalytics } from "firebase/analytics";
 
 const firebaseConfig = {
   apiKey: "AIzaSyARvEO3I_12GCiTL0nMsGb8JTlrTE41aOk",
-  authDomain: "coslife-7dfdb.firebaseapp.com",
-  projectId: "coslife-7dfdb",
-  storageBucket: "coslife-7dfdb.firebasestorage.app",
+  authDomain: "coshub-7dfdb.firebaseapp.com",
+  projectId: "coshub-7dfdb",
+  storageBucket: "coshub-7dfdb.appspot.com",
   messagingSenderId: "650325140859",
   appId: "1:650325140859:web:08bab9a084119f421089de",
   measurementId: "G-W38MR78EWK"
