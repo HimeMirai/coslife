@@ -11,7 +11,7 @@ import {
   doc,
   setDoc,
 } from 'firebase/firestore';
-import { Send, MessageSquare, User, ShieldCheck, Smile, Users, X, ArrowLeft, Circle } from 'lucide-react';
+import { Send, MessageSquare, User, ShieldCheck, Smile, Users, ArrowLeft, Circle } from 'lucide-react';
 
 const COMMON_EMOJIS = ['👋', '✨', '💖', '🔥', '🎉', '⚔️', '🎭', '📸', '💯', '🙏', '👍', '😊'];
 
@@ -22,7 +22,7 @@ export default function CosplayChat() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showOnlineList, setShowOnlineList] = useState(false);
   
-  // DM state: null = Community Lounge (Public), otherwise target user object { uid, displayName, photoURL }
+  // DM state: null = Global Chat, otherwise target user object { uid, displayName, photoURL }
   const [activeDMUser, setActiveDMUser] = useState(null);
 
   const messagesEndRef = useRef(null);
@@ -30,6 +30,13 @@ export default function CosplayChat() {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Helper function to switch channels cleanly without cascading state issues
+  const handleSelectUserDM = (userToDM) => {
+    setMessages([]);
+    setActiveDMUser(userToDM);
+    setShowOnlineList(false);
   };
 
   // 1. Presence System: Mark current user online & fetch active online users
@@ -91,7 +98,7 @@ export default function CosplayChat() {
     const messageText = newMessage.trim();
     if (!messageText || !currentUser) return;
 
-    // Clear input field immediately
+    // Clear input immediately
     setNewMessage('');
     setShowEmojiPicker(false);
 
@@ -135,15 +142,15 @@ export default function CosplayChat() {
 
   return (
     <div className="w-full h-full bg-slate-900 flex flex-col justify-between overflow-hidden relative">
-      {/* Header */}
+      {/* Top Main Header */}
       <div className="p-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
         {activeDMUser ? (
-          /* Private DM Header Space */
+          /* Private DM Header */
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setActiveDMUser(null)}
+              onClick={() => handleSelectUserDM(null)}
               className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
-              title="Back to Public Chat"
+              title="Return to Community Lounge"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
@@ -156,7 +163,7 @@ export default function CosplayChat() {
               <h2 className="text-xs font-bold text-slate-100 flex items-center gap-1">
                 {activeDMUser.displayName}
               </h2>
-              <p className="text-[9px] text-amber-400 font-semibold">Private Conversation</p>
+              <p className="text-[9px] text-amber-400 font-semibold">Private DM</p>
             </div>
           </div>
         ) : (
@@ -170,11 +177,11 @@ export default function CosplayChat() {
           </div>
         )}
 
-        {/* Online Status Toggle Button */}
+        {/* Online Status Toggle */}
         <button
           onClick={() => setShowOnlineList(!showOnlineList)}
-          className="flex items-center gap-1.5 bg-slate-900 px-2 py-1 rounded-full border border-slate-800 hover:border-amber-500/50 transition text-slate-300 hover:text-amber-400"
-          title="See who is online"
+          className="flex items-center gap-1.5 bg-slate-900 px-2.5 py-1 rounded-full border border-slate-800 hover:border-amber-500/50 transition text-slate-300 hover:text-amber-400"
+          title="Toggle online members"
         >
           <Circle className="w-2 h-2 text-emerald-400 fill-emerald-400 animate-pulse" />
           <Users className="w-3.5 h-3.5 text-slate-400" />
@@ -182,65 +189,56 @@ export default function CosplayChat() {
         </button>
       </div>
 
-      {/* Online Cosplayers Modal/Overlay */}
-      {showOnlineList && (
-        <div className="absolute inset-x-0 top-12 z-20 bg-slate-950/95 backdrop-blur border-b border-slate-800 p-3 shadow-2xl max-h-48 overflow-y-auto">
-          <div className="flex items-center justify-between mb-2 pb-1 border-b border-slate-800">
-            <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-              <Circle className="w-2 h-2 text-emerald-400 fill-emerald-400" /> Active Cosplayers Online ({onlineUsers.length})
-            </span>
-            <button onClick={() => setShowOnlineList(false)} className="text-slate-400 hover:text-white">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="space-y-1.5">
-            {onlineUsers.map((u) => {
-              const isMe = u.uid === currentUser?.uid;
-              return (
-                <div
-                  key={u.uid}
-                  onClick={() => {
-                    if (!isMe) {
-                      setActiveDMUser(u);
-                      setShowOnlineList(false);
-                    }
-                  }}
-                  className={`flex items-center justify-between p-1.5 rounded-xl transition ${
-                    isMe ? 'opacity-60 cursor-default bg-slate-900/50' : 'hover:bg-slate-800 cursor-pointer'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <img
-                      src={u.photoURL || 'https://api.dicebear.com/7.x/bottts/svg?seed=Cosplayer1'}
-                      alt=""
-                      className="w-5 h-5 rounded-full object-cover border border-slate-700"
-                    />
-                    <span className="text-xs text-slate-200 font-medium">
-                      {u.displayName} {isMe && '(You)'}
-                    </span>
-                  </div>
-                  {!isMe && (
-                    <span className="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full font-bold">
-                      Click to DM
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* ONLINE MEMBERS CAROUSEL / LIST BAR */}
+      <div className="bg-slate-950/80 border-b border-slate-800 px-3 py-1.5 flex items-center gap-2 overflow-x-auto">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
+          <Circle className="w-1.5 h-1.5 text-emerald-400 fill-emerald-400" /> Online:
+        </span>
+        {onlineUsers.length === 0 ? (
+          <span className="text-[10px] text-slate-500">No other cosplayers online</span>
+        ) : (
+          onlineUsers.map((u) => {
+            const isMe = u.uid === currentUser?.uid;
+            return (
+              <button
+                key={u.uid}
+                disabled={isMe}
+                onClick={() => handleSelectUserDM(u)}
+                className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition shrink-0 ${
+                  activeDMUser?.uid === u.uid
+                    ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                    : isMe
+                    ? 'bg-slate-900/50 border-slate-800 text-slate-400 cursor-default'
+                    : 'bg-slate-900 border-slate-800 text-slate-200 hover:border-amber-500/50 hover:text-white'
+                }`}
+                title={!isMe ? `Start DM with ${u.displayName}` : 'You'}
+              >
+                <img
+                  src={u.photoURL || 'https://api.dicebear.com/7.x/bottts/svg?seed=Cosplayer1'}
+                  alt=""
+                  className="w-4 h-4 rounded-full object-cover"
+                />
+                <span className="text-[10px] font-medium truncate max-w-[90px]">
+                  {u.displayName} {isMe && '(You)'}
+                </span>
+              </button>
+            );
+          })
+        )}
+      </div>
 
       {/* Messages Feed */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-900/50">
         {!currentUser ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-400 text-xs">
             <ShieldCheck className="w-8 h-8 text-amber-500 mb-2" />
-            Please sign in with Google to join the conversation.
+            Please sign in to join the conversation.
           </div>
         ) : messages.length === 0 ? (
           <div className="text-center text-slate-500 text-xs py-10">
-            {activeDMUser ? `Start private message with ${activeDMUser.displayName} 👋` : 'No messages yet. Say hi! 👋'}
+            {activeDMUser 
+              ? `This is the start of your private conversation with ${activeDMUser.displayName}. 👋` 
+              : 'No messages yet. Say hi to the community! 👋'}
           </div>
         ) : (
           messages.map((msg) => {
@@ -253,12 +251,12 @@ export default function CosplayChat() {
                   isMe ? 'ml-auto flex-row-reverse' : 'mr-auto'
                 }`}
               >
-                {/* Avatar: Direct Message Trigger */}
+                {/* Avatar with DM action */}
                 <button
                   disabled={isMe}
-                  onClick={() => setActiveDMUser({ uid: msg.uid, displayName: msg.displayName, photoURL: msg.photoURL })}
+                  onClick={() => handleSelectUserDM({ uid: msg.uid, displayName: msg.displayName, photoURL: msg.photoURL })}
                   className={`relative shrink-0 ${!isMe ? 'hover:opacity-80 transition cursor-pointer' : 'cursor-default'}`}
-                  title={!isMe ? `Direct message ${msg.displayName}` : ''}
+                  title={!isMe ? `Open DM with ${msg.displayName}` : ''}
                 >
                   {msg.photoURL ? (
                     <img
