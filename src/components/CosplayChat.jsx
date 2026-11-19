@@ -13,7 +13,22 @@ import {
   deleteDoc,
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
-import { Send, MessageSquare, User, ShieldCheck, Smile, Users, ArrowLeft, Circle, Sticker } from 'lucide-react';
+import { 
+  Send, 
+  MessageSquare, 
+  User, 
+  ShieldCheck, 
+  Smile, 
+  Users, 
+  ArrowLeft, 
+  Circle, 
+  Sticker,
+  ImagePlus,
+  MapPin,
+  ExternalLink,
+  X,
+  Navigation
+} from 'lucide-react';
 
 const COMMON_EMOJIS = ['👋', '✨', '💖', '🔥', '🎉', '⚔️', '🎭', '📸', '💯', '🙏', '👍', '😊'];
 
@@ -26,6 +41,28 @@ const COSPLAY_STICKERS = [
   { id: 'budget', icon: '💸', label: 'RIP Wallet', bg: 'from-red-500/20 to-orange-500/20 border-red-500/40 text-red-200' },
 ];
 
+// Helper to compress images so they fit cleanly within Firestore's 1MB document limit
+const compressImage = (file, maxWidth = 720, quality = 0.7) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = event.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
 export default function CosplayChat() {
   const [currentUser, setCurrentUser] = useState(auth.currentUser);
   const [messages, setMessages] = useState([]);
@@ -35,11 +72,19 @@ export default function CosplayChat() {
   const [pickerTab, setPickerTab] = useState('emoji');
   const [showOnlineList, setShowOnlineList] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState({});
+
+  // Location Modal State
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [venueName, setVenueName] = useState('');
+  const [venueNotes, setVenueNotes] = useState('');
+  const [isLocating, setIsLocating] = useState(false);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   
   // DM state: null = Global Chat, otherwise target user object { uid, displayName, photoURL }
   const [activeDMUser, setActiveDMUser] = useState(null);
 
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
   const latestDMIdsRef = useRef({});
 
   const scrollToBottom = () => {
@@ -92,7 +137,6 @@ export default function CosplayChat() {
     const heartbeat = setInterval(markOnline, 30000);
     window.addEventListener('beforeunload', markOffline);
 
-    // Listen for ALL online users in the system without dropping them due to clock skew
     const qOnline = query(collection(db, 'online_users'));
     const unsubscribeOnline = onSnapshot(qOnline, (snapshot) => {
       const users = snapshot.docs
@@ -149,7 +193,6 @@ export default function CosplayChat() {
   useEffect(() => {
     let q;
     if (activeDMUser && currentUser) {
-      // Direct message channel key (alphabetical order of UIDs)
       const dmChannelId = [currentUser.uid, activeDMUser.uid].sort().join('_');
       q = query(
         collection(db, `direct_messages/${dmChannelId}/messages`),
@@ -157,7 +200,6 @@ export default function CosplayChat() {
         limit(50)
       );
     } else {
-      // Global Lounge Chat
       q = query(
         collection(db, 'chat_messages'),
         orderBy('createdAt', 'asc'),
@@ -177,39 +219,32 @@ export default function CosplayChat() {
     return () => unsubscribe();
   }, [activeDMUser, currentUser]);
 
+  const sendPayload = async (payload) => {
+    if (!currentUser) return;
+    const targetCollection = activeDMUser
+      ? collection(db, `direct_messages/${[currentUser.uid, activeDMUser.uid].sort().join('_')}/messages`)
+      : collection(db, 'chat_messages');
+
+    await addDoc(targetCollection, {
+      ...payload,
+      createdAt: serverTimestamp(),
+      uid: currentUser.uid,
+      displayName: currentUser.displayName || 'Anonymous Cosplayer',
+      photoURL: currentUser.photoURL || '',
+    });
+    scrollToBottom();
+  };
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
     const messageText = newMessage.trim();
     if (!messageText || !currentUser) return;
 
-    // Clear input immediately
     setNewMessage('');
     setShowEmojiPicker(false);
 
     try {
-      if (activeDMUser) {
-        // Send Direct Message
-        const dmChannelId = [currentUser.uid, activeDMUser.uid].sort().join('_');
-        await addDoc(collection(db, `direct_messages/${dmChannelId}/messages`), {
-          type: 'text',
-          text: messageText,
-          createdAt: serverTimestamp(),
-          uid: currentUser.uid,
-          displayName: currentUser.displayName || 'Anonymous Cosplayer',
-          photoURL: currentUser.photoURL || '',
-        });
-      } else {
-        // Send Global Message
-        await addDoc(collection(db, 'chat_messages'), {
-          type: 'text',
-          text: messageText,
-          createdAt: serverTimestamp(),
-          uid: currentUser.uid,
-          displayName: currentUser.displayName || 'Anonymous Cosplayer',
-          photoURL: currentUser.photoURL || '',
-        });
-      }
-      scrollToBottom();
+      await sendPayload({ type: 'text', text: messageText });
     } catch (error) {
       console.error('Error sending message:', error);
       setNewMessage(messageText);
@@ -221,23 +256,111 @@ export default function CosplayChat() {
     setShowEmojiPicker(false);
 
     try {
-      const targetCollection = activeDMUser
-        ? collection(db, `direct_messages/${[currentUser.uid, activeDMUser.uid].sort().join('_')}/messages`)
-        : collection(db, 'chat_messages');
-
-      await addDoc(targetCollection, {
+      await sendPayload({
         type: 'sticker',
         stickerId: sticker.id,
         text: `${sticker.icon} ${sticker.label}`,
-        createdAt: serverTimestamp(),
-        uid: currentUser.uid,
-        displayName: currentUser.displayName || 'Anonymous Cosplayer',
-        photoURL: currentUser.photoURL || '',
       });
-      scrollToBottom();
     } catch (error) {
       console.error('Error sending sticker:', error);
     }
+  };
+
+  // Handle Photo or Video Upload
+  const handleMediaSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser) return;
+    e.target.value = ''; // Reset input so same file can be chosen again
+
+    setIsUploadingMedia(true);
+    try {
+      if (file.type.startsWith('image/')) {
+        const compressedDataUrl = await compressImage(file);
+        await sendPayload({
+          type: 'image',
+          mediaUrl: compressedDataUrl,
+          text: '📷 Shared a photo',
+        });
+      } else if (file.type.startsWith('video/')) {
+        // Keep video files under ~700KB for direct Firestore storage
+        if (file.size > 700 * 1024) {
+          alert('Please select a short video clip under 700KB (or paste a YouTube/video link in the chat).');
+          setIsUploadingMedia(false);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+          await sendPayload({
+            type: 'video',
+            mediaUrl: ev.target.result,
+            text: '🎥 Shared a video',
+          });
+          setIsUploadingMedia(false);
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+    } catch (error) {
+      console.error('Error uploading media:', error);
+      alert('Failed to send media. Please try a smaller file.');
+    }
+    setIsUploadingMedia(false);
+  };
+
+  // Send Venue Location (Manual or GPS)
+  const handleSendVenueLocation = async (e) => {
+    e.preventDefault();
+    if (!venueName.trim() || !currentUser) return;
+
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venueName.trim())}`;
+    try {
+      await sendPayload({
+        type: 'location',
+        venueName: venueName.trim(),
+        venueNotes: venueNotes.trim(),
+        mapsUrl,
+        text: `📍 Venue: ${venueName.trim()}`,
+      });
+      setVenueName('');
+      setVenueNotes('');
+      setShowLocationModal(false);
+    } catch (error) {
+      console.error('Error sharing location:', error);
+    }
+  };
+
+  const handleShareCurrentGPS = () => {
+    if (!navigator.geolocation || !currentUser) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+        try {
+          await sendPayload({
+            type: 'location',
+            venueName: venueName.trim() || 'Live Meetup Pin',
+            venueNotes: venueNotes.trim() || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+            mapsUrl,
+            text: `📍 Shared live location`,
+          });
+          setVenueName('');
+          setVenueNotes('');
+          setShowLocationModal(false);
+        } catch (error) {
+          console.error('Error sending GPS location:', error);
+        }
+        setIsLocating(false);
+      },
+      () => {
+        alert('Unable to get your GPS location. You can type the venue name instead!');
+        setIsLocating(false);
+      }
+    );
   };
 
   const handleEmojiClick = (emoji) => {
@@ -257,7 +380,6 @@ export default function CosplayChat() {
       {/* Top Main Header */}
       <div className="p-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
         {activeDMUser ? (
-          /* Private DM Header */
           <div className="flex items-center gap-2">
             <button
               onClick={() => handleSelectUserDM(null)}
@@ -279,7 +401,6 @@ export default function CosplayChat() {
             </div>
           </div>
         ) : (
-          /* Public Lounge Header */
           <div className="flex items-center gap-2">
             <MessageSquare className="w-5 h-5 text-amber-500 shrink-0" />
             <div>
@@ -312,7 +433,7 @@ export default function CosplayChat() {
           <Circle className="w-1.5 h-1.5 text-emerald-400 fill-emerald-400" /> Online:
         </span>
         {onlineUsers.length === 0 ? (
-          <span className="text-[10px] text-slate-500">No cosplayers online</span>
+          <span className="text-[10px] text-slate-500">No other cosplayers online</span>
         ) : (
           onlineUsers.map((u) => {
             const isMe = u.uid === currentUser?.uid;
@@ -399,11 +520,12 @@ export default function CosplayChat() {
                   )}
                 </button>
 
-                {/* Message Bubble or Sticker Card */}
+                {/* Message Bubble / Sticker / Image / Video / Venue Location */}
                 <div className="flex flex-col">
                   <span className={`text-[9px] text-slate-400 mb-0.5 px-1 ${isMe ? 'text-right' : 'text-left'}`}>
                     {msg.displayName}
                   </span>
+
                   {stickerObj ? (
                     <div
                       className={`px-3.5 py-2.5 rounded-2xl border bg-gradient-to-br ${stickerObj.bg} flex flex-col items-center justify-center shadow-md`}
@@ -413,6 +535,48 @@ export default function CosplayChat() {
                         {stickerObj.label}
                       </span>
                     </div>
+                  ) : msg.type === 'image' && msg.mediaUrl ? (
+                    <div className="rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 max-w-[210px] shadow-md">
+                      <img
+                        src={msg.mediaUrl}
+                        alt="Shared cosplay"
+                        className="w-full h-auto max-h-48 object-cover cursor-pointer"
+                        onClick={() => window.open(msg.mediaUrl, '_blank')}
+                      />
+                    </div>
+                  ) : msg.type === 'video' && msg.mediaUrl ? (
+                    <div className="rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 max-w-[220px] shadow-md">
+                      <video
+                        src={msg.mediaUrl}
+                        controls
+                        className="w-full max-h-48 object-cover"
+                      />
+                    </div>
+                  ) : msg.type === 'location' ? (
+                    <a
+                      href={msg.mapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block p-2.5 rounded-2xl bg-slate-800/90 hover:bg-slate-800 border border-amber-500/40 transition max-w-[220px] shadow-md group"
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 shrink-0">
+                          <MapPin className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-bold text-slate-100 truncate flex items-center gap-1">
+                            {msg.venueName}
+                            <ExternalLink className="w-3 h-3 text-amber-400 shrink-0 opacity-80 group-hover:opacity-100" />
+                          </p>
+                          {msg.venueNotes && (
+                            <p className="text-[9px] text-slate-400 truncate mt-0.5">{msg.venueNotes}</p>
+                          )}
+                          <span className="inline-block text-[9px] text-amber-400 font-semibold mt-1">
+                            Open in Google Maps →
+                          </span>
+                        </div>
+                      </div>
+                    </a>
                   ) : (
                     <div
                       className={`px-3 py-1.5 rounded-2xl text-xs break-words ${
@@ -424,6 +588,7 @@ export default function CosplayChat() {
                       {msg.text}
                     </div>
                   )}
+
                   {msg.createdAt && (
                     <span className={`text-[8px] text-slate-500 mt-0.5 px-1 ${isMe ? 'text-right' : 'text-left'}`}>
                       {formatMessageTime(msg.createdAt)}
@@ -436,6 +601,59 @@ export default function CosplayChat() {
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Venue Location Modal */}
+      {showLocationModal && (
+        <div className="absolute inset-x-2 bottom-12 z-30 bg-slate-950 border border-slate-800 rounded-xl p-3 shadow-2xl">
+          <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-800">
+            <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5" /> Share Venue / Meetup Spot
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowLocationModal(false)}
+              className="text-slate-400 hover:text-white"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSendVenueLocation} className="space-y-2">
+            <input
+              type="text"
+              placeholder="Venue name (e.g., SMX Hall 2, Ayala Cebu)"
+              value={venueName}
+              onChange={(e) => setVenueName(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500"
+            />
+            <input
+              type="text"
+              placeholder="Meetup notes (e.g., Near main entrance at 2 PM)"
+              value={venueNotes}
+              onChange={(e) => setVenueNotes(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500"
+            />
+            <div className="flex items-center gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={handleShareCurrentGPS}
+                disabled={isLocating}
+                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 py-1.5 px-2 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition"
+              >
+                <Navigation className="w-3 h-3 text-emerald-400" />
+                {isLocating ? 'Locating...' : 'Share Live GPS'}
+              </button>
+              <button
+                type="submit"
+                disabled={!venueName.trim()}
+                className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 py-1.5 px-2 rounded-lg text-[10px] font-bold transition disabled:opacity-50"
+              >
+                Send Venue Pin
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Emoji & Sticker Picker Window */}
       {showEmojiPicker && (
@@ -492,22 +710,60 @@ export default function CosplayChat() {
         </div>
       )}
 
+      {/* Hidden File Input for Photos & Videos */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*"
+        onChange={handleMediaSelect}
+        className="hidden"
+      />
+
       {/* Message Input Bar */}
-      <form onSubmit={handleSendMessage} className="p-2 bg-slate-950 border-t border-slate-800 flex items-center gap-1.5">
+      <form onSubmit={handleSendMessage} className="p-2 bg-slate-950 border-t border-slate-800 flex items-center gap-1">
         <button
           type="button"
-          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-          className="text-slate-400 hover:text-amber-400 p-1.5 hover:bg-slate-800 rounded-xl transition shrink-0"
+          disabled={!currentUser}
+          onClick={() => {
+            setShowEmojiPicker(!showEmojiPicker);
+            setShowLocationModal(false);
+          }}
+          className="text-slate-400 hover:text-amber-400 p-1.5 hover:bg-slate-800 rounded-xl transition shrink-0 disabled:opacity-50"
           title="Emojis & Stickers"
         >
           <Smile className="w-4 h-4" />
+        </button>
+
+        <button
+          type="button"
+          disabled={!currentUser || isUploadingMedia}
+          onClick={() => fileInputRef.current?.click()}
+          className="text-slate-400 hover:text-amber-400 p-1.5 hover:bg-slate-800 rounded-xl transition shrink-0 disabled:opacity-50"
+          title="Send Photo or Short Video"
+        >
+          <ImagePlus className="w-4 h-4" />
+        </button>
+
+        <button
+          type="button"
+          disabled={!currentUser}
+          onClick={() => {
+            setShowLocationModal(!showLocationModal);
+            setShowEmojiPicker(false);
+          }}
+          className="text-slate-400 hover:text-amber-400 p-1.5 hover:bg-slate-800 rounded-xl transition shrink-0 disabled:opacity-50"
+          title="Share Venue Location"
+        >
+          <MapPin className="w-4 h-4" />
         </button>
 
         <input
           type="text"
           disabled={!currentUser}
           placeholder={
-            !currentUser 
+            isUploadingMedia
+              ? "Uploading media..."
+              : !currentUser 
               ? "Sign in to chat..." 
               : activeDMUser 
               ? `DMing ${activeDMUser.displayName}...` 
@@ -515,13 +771,13 @@ export default function CosplayChat() {
           }
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
-          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500 disabled:opacity-50"
+          className="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500 disabled:opacity-50"
         />
 
         <button
           type="submit"
           disabled={!currentUser || !newMessage.trim()}
-          className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center transition disabled:opacity-50 shrink-0"
+          className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center transition disabled:opacity-50 shrink-0"
         >
           <Send className="w-3.5 h-3.5" />
         </button>
