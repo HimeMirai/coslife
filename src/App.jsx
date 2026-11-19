@@ -11,7 +11,7 @@ import {
   Palette
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, updateProfile } from 'firebase/auth';
-import { doc, onSnapshot, collection, query, orderBy, limit } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, collection, query, orderBy, limit } from 'firebase/firestore';
 import { auth, db, googleProvider } from './firebase';
 import CraftingStudio from './components/CraftingStudio';
 import PropScaler from './components/PropScaler';
@@ -233,6 +233,11 @@ export default function App() {
     if (auth.currentUser) {
       try {
         await updateProfile(auth.currentUser, { displayName, photoURL });
+        await setDoc(
+          doc(db, 'online_users', auth.currentUser.uid),
+          { displayName, photoURL },
+          { merge: true }
+        );
         setUser({ ...auth.currentUser, displayName, photoURL });
       } catch (error) {
         console.error("Profile update error:", error);
