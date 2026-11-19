@@ -44,7 +44,8 @@ export default function App() {
   // State for the Chat Pop-up Modal & Chat Heads
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadGlobalCount, setUnreadGlobalCount] = useState(0);
-  const [chatHeads, setChatHeads] = useState([]); // [{ uid, displayName, photoURL, count, lastText }]
+  // [{ id, channel: 'global' | 'dm', uid, displayName, photoURL, count, lastText }]
+  const [chatHeads, setChatHeads] = useState([]);
   const [selectedChatHeadUser, setSelectedChatHeadUser] = useState(null);
   const seenMsgIdsRef = useRef({});
 
@@ -79,7 +80,7 @@ export default function App() {
   useEffect(() => {
     if (!user?.uid) return;
 
-    // 1. Watch latest global chat message
+    // 1. Watch latest global community message -> pop up Community Chat Head + badge
     const qGlobal = query(
       collection(db, 'chat_messages'),
       orderBy('createdAt', 'desc'),
@@ -96,10 +97,38 @@ export default function App() {
 
       if (!isFirstLoad && data.uid !== user.uid && !isChatOpen) {
         setUnreadGlobalCount((prev) => prev + 1);
+        setChatHeads((prev) => {
+          const existing = prev.find((h) => h.id === 'global');
+          const previewText = `${data.displayName || 'Cosplayer'}: ${data.text || 'Sent media'}`;
+          if (existing) {
+            return prev.map((h) =>
+              h.id === 'global'
+                ? {
+                    ...h,
+                    photoURL: data.photoURL || h.photoURL,
+                    count: h.count + 1,
+                    lastText: previewText,
+                  }
+                : h
+            );
+          }
+          return [
+            ...prev,
+            {
+              id: 'global',
+              channel: 'global',
+              uid: data.uid,
+              displayName: 'Community Lounge',
+              photoURL: data.photoURL || '',
+              count: 1,
+              lastText: previewText,
+            },
+          ];
+        });
       }
     });
 
-    // 2. Watch online users' DM channels for incoming messages
+    // 2. Watch online users' DM channels for incoming private messages -> pop up User DM Chat Head
     const dmUnsubs = {};
     const unsubOnline = onSnapshot(collection(db, 'online_users'), (onlineSnap) => {
       onlineSnap.docs.forEach((uDoc) => {
@@ -124,17 +153,25 @@ export default function App() {
 
           if (!isFirstDM && dmData.uid !== user.uid && !isChatOpen) {
             setChatHeads((prev) => {
-              const existing = prev.find((h) => h.uid === otherUser.uid);
+              const existing = prev.find((h) => h.id === otherUser.uid);
               if (existing) {
                 return prev.map((h) =>
-                  h.uid === otherUser.uid
-                    ? { ...h, count: h.count + 1, lastText: dmData.text || 'New message' }
+                  h.id === otherUser.uid
+                    ? {
+                        ...h,
+                        displayName: dmData.displayName || otherUser.displayName || h.displayName,
+                        photoURL: dmData.photoURL || otherUser.photoURL || h.photoURL,
+                        count: h.count + 1,
+                        lastText: dmData.text || 'New message',
+                      }
                     : h
                 );
               }
               return [
                 ...prev,
                 {
+                  id: otherUser.uid,
+                  channel: 'dm',
                   uid: otherUser.uid,
                   displayName: dmData.displayName || otherUser.displayName || 'Cosplayer',
                   photoURL: dmData.photoURL || otherUser.photoURL || '',
@@ -158,18 +195,29 @@ export default function App() {
   const handleOpenChatFromButton = () => {
     setSelectedChatHeadUser(null);
     setUnreadGlobalCount(0);
+    setChatHeads((prev) => prev.filter((h) => h.channel !== 'global'));
     setIsChatOpen(true);
   };
 
-  const handleOpenChatHead = (headUser) => {
-    setSelectedChatHeadUser(headUser);
-    setChatHeads((prev) => prev.filter((h) => h.uid !== headUser.uid));
+  const handleOpenChatHead = (head) => {
+    if (head.channel === 'global') {
+      setSelectedChatHeadUser(null);
+      setUnreadGlobalCount(0);
+    } else {
+      setSelectedChatHeadUser({
+        uid: head.uid,
+        displayName: head.displayName,
+        photoURL: head.photoURL,
+      });
+    }
+    setChatHeads((prev) => prev.filter((h) => h.id !== head.id));
     setIsChatOpen(true);
   };
 
-  const handleDismissChatHead = (e, uid) => {
+  const handleDismissChatHead = (e, headId) => {
     e.stopPropagation();
-    setChatHeads((prev) => prev.filter((h) => h.uid !== uid));
+    if (headId === 'global') setUnreadGlobalCount(0);
+    setChatHeads((prev) => prev.filter((h) => h.id !== headId));
   };
 
   const handleGoogleSignIn = async () => {
@@ -288,7 +336,10 @@ export default function App() {
       : { background: dashboardTheme.bgValue };
 
   const totalBadgeCount =
-    unreadGlobalCount + chatHeads.reduce((sum, h) => sum + h.count, 0);
+    unreadGlobalCount +
+    chatHeads
+      .filter((h) => h.channel === 'dm')
+      .reduce((sum, h) => sum + h.count, 0);
 
   // ✅ LOGGED IN WORKSPACE
   return (
@@ -396,16 +447,16 @@ export default function App() {
       <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2.5">
         {!isChatOpen ? (
           <>
-            {/* Floating DM Chat Heads Stack */}
+            {/* Floating Community & DM Chat Heads Stack */}
             {chatHeads.map((head) => (
               <div
-                key={head.uid}
+                key={head.id}
                 onClick={() => handleOpenChatHead(head)}
                 className="relative flex items-center gap-2 cursor-pointer group animate-bounce"
                 title={`${head.displayName}: ${head.lastText}`}
               >
-                {/* Hover Message Preview Pill */}
-                <div className="hidden sm:flex flex-col items-end bg-slate-950/95 border border-slate-700 px-3 py-1.5 rounded-xl shadow-xl max-w-[190px] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                {/* Message Preview Pill */}
+                <div className="flex flex-col items-end bg-slate-950/95 border border-slate-700 px-3 py-1.5 rounded-xl shadow-xl max-w-[200px]">
                   <span className="text-[11px] font-bold text-amber-400 truncate max-w-full">
                     {head.displayName}
                   </span>
@@ -415,20 +466,22 @@ export default function App() {
                 </div>
 
                 {/* Circular Avatar Bubble */}
-                <div className="relative">
+                <div className="relative shrink-0">
                   <img
                     src={head.photoURL || 'https://api.dicebear.com/7.x/bottts/svg?seed=Cosplayer1'}
                     alt={head.displayName}
-                    className="w-12 h-12 rounded-full object-cover border-2 border-amber-400 shadow-2xl bg-slate-900 group-hover:scale-105 transition-transform"
+                    className={`w-12 h-12 rounded-full object-cover border-2 shadow-2xl bg-slate-900 group-hover:scale-105 transition-transform ${
+                      head.channel === 'global' ? 'border-sky-400' : 'border-amber-400'
+                    }`}
                   />
-                  {/* Unread DM Count Badge */}
+                  {/* Unread Count Badge */}
                   <span className="absolute -bottom-1 -left-1 bg-rose-500 text-white text-[10px] font-extrabold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center border-2 border-slate-950 shadow">
                     {head.count}
                   </span>
                   {/* Dismiss Chat Head 'X' Button */}
                   <button
                     type="button"
-                    onClick={(e) => handleDismissChatHead(e, head.uid)}
+                    onClick={(e) => handleDismissChatHead(e, head.id)}
                     className="absolute -top-1 -right-1 bg-slate-800 hover:bg-rose-500 text-slate-200 hover:text-white w-4 h-4 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
                     title="Dismiss chat head"
                   >
