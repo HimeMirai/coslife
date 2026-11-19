@@ -33,6 +33,49 @@ const DEFAULT_THEME = {
   overlayOpacity: 0.65,
 };
 
+// Synthesize a gentle notification chime using Web Audio API (no external MP3 required)
+const playNotificationSound = (type = 'global') => {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    const playTone = (freq, startOffset, duration) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + startOffset);
+
+      gain.gain.setValueAtTime(0.001, now + startOffset);
+      gain.gain.exponentialRampToValueAtTime(0.14, now + startOffset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + startOffset + duration);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now + startOffset);
+      osc.stop(now + startOffset + duration);
+    };
+
+    if (type === 'dm') {
+      // Two-note bright chime for Private DMs
+      playTone(660, 0, 0.16);
+      playTone(880, 0.12, 0.24);
+    } else {
+      // Soft single pop chime for Community Lounge
+      playTone(587.33, 0, 0.2);
+    }
+
+    setTimeout(() => {
+      ctx.close().catch(() => {});
+    }, 600);
+  } catch {
+    // Ignore autoplay restrictions before first user interaction
+  }
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('studio');
   const [user, setUser] = useState(null);
@@ -76,11 +119,11 @@ export default function App() {
     return () => unsubscribe();
   }, [user?.uid]);
 
-  // Listen for new Global & DM messages while chat is closed to display Chat Heads & Unread Dot
+  // Listen for new Global & DM messages to play sound, show Chat Heads & Unread Dot
   useEffect(() => {
     if (!user?.uid) return;
 
-    // 1. Watch latest global community message -> pop up Community Chat Head + badge
+    // 1. Watch latest global community message
     const qGlobal = query(
       collection(db, 'chat_messages'),
       orderBy('createdAt', 'desc'),
@@ -95,40 +138,44 @@ export default function App() {
       const isFirstLoad = !('global' in seenMsgIdsRef.current);
       seenMsgIdsRef.current.global = latest.id;
 
-      if (!isFirstLoad && data.uid !== user.uid && !isChatOpen) {
-        setUnreadGlobalCount((prev) => prev + 1);
-        setChatHeads((prev) => {
-          const existing = prev.find((h) => h.id === 'global');
-          const previewText = `${data.displayName || 'Cosplayer'}: ${data.text || 'Sent media'}`;
-          if (existing) {
-            return prev.map((h) =>
-              h.id === 'global'
-                ? {
-                    ...h,
-                    photoURL: data.photoURL || h.photoURL,
-                    count: h.count + 1,
-                    lastText: previewText,
-                  }
-                : h
-            );
-          }
-          return [
-            ...prev,
-            {
-              id: 'global',
-              channel: 'global',
-              uid: data.uid,
-              displayName: 'Community Lounge',
-              photoURL: data.photoURL || '',
-              count: 1,
-              lastText: previewText,
-            },
-          ];
-        });
+      if (!isFirstLoad && data.uid !== user.uid) {
+        playNotificationSound('global');
+
+        if (!isChatOpen) {
+          setUnreadGlobalCount((prev) => prev + 1);
+          setChatHeads((prev) => {
+            const existing = prev.find((h) => h.id === 'global');
+            const previewText = `${data.displayName || 'Cosplayer'}: ${data.text || 'Sent media'}`;
+            if (existing) {
+              return prev.map((h) =>
+                h.id === 'global'
+                  ? {
+                      ...h,
+                      photoURL: data.photoURL || h.photoURL,
+                      count: h.count + 1,
+                      lastText: previewText,
+                    }
+                  : h
+              );
+            }
+            return [
+              ...prev,
+              {
+                id: 'global',
+                channel: 'global',
+                uid: data.uid,
+                displayName: 'Community Lounge',
+                photoURL: data.photoURL || '',
+                count: 1,
+                lastText: previewText,
+              },
+            ];
+          });
+        }
       }
     });
 
-    // 2. Watch online users' DM channels for incoming private messages -> pop up User DM Chat Head
+    // 2. Watch online users' DM channels for incoming private messages
     const dmUnsubs = {};
     const unsubOnline = onSnapshot(collection(db, 'online_users'), (onlineSnap) => {
       onlineSnap.docs.forEach((uDoc) => {
@@ -151,35 +198,39 @@ export default function App() {
           const isFirstDM = !(otherUser.uid in seenMsgIdsRef.current);
           seenMsgIdsRef.current[otherUser.uid] = latestDM.id;
 
-          if (!isFirstDM && dmData.uid !== user.uid && !isChatOpen) {
-            setChatHeads((prev) => {
-              const existing = prev.find((h) => h.id === otherUser.uid);
-              if (existing) {
-                return prev.map((h) =>
-                  h.id === otherUser.uid
-                    ? {
-                        ...h,
-                        displayName: dmData.displayName || otherUser.displayName || h.displayName,
-                        photoURL: dmData.photoURL || otherUser.photoURL || h.photoURL,
-                        count: h.count + 1,
-                        lastText: dmData.text || 'New message',
-                      }
-                    : h
-                );
-              }
-              return [
-                ...prev,
-                {
-                  id: otherUser.uid,
-                  channel: 'dm',
-                  uid: otherUser.uid,
-                  displayName: dmData.displayName || otherUser.displayName || 'Cosplayer',
-                  photoURL: dmData.photoURL || otherUser.photoURL || '',
-                  count: 1,
-                  lastText: dmData.text || 'New message',
-                },
-              ];
-            });
+          if (!isFirstDM && dmData.uid !== user.uid) {
+            playNotificationSound('dm');
+
+            if (!isChatOpen) {
+              setChatHeads((prev) => {
+                const existing = prev.find((h) => h.id === otherUser.uid);
+                if (existing) {
+                  return prev.map((h) =>
+                    h.id === otherUser.uid
+                      ? {
+                          ...h,
+                          displayName: dmData.displayName || otherUser.displayName || h.displayName,
+                          photoURL: dmData.photoURL || otherUser.photoURL || h.photoURL,
+                          count: h.count + 1,
+                          lastText: dmData.text || 'New message',
+                        }
+                      : h
+                  );
+                }
+                return [
+                  ...prev,
+                  {
+                    id: otherUser.uid,
+                    channel: 'dm',
+                    uid: otherUser.uid,
+                    displayName: dmData.displayName || otherUser.displayName || 'Cosplayer',
+                    photoURL: dmData.photoURL || otherUser.photoURL || '',
+                    count: 1,
+                    lastText: dmData.text || 'New message',
+                  },
+                ];
+              });
+            }
           }
         });
       });
