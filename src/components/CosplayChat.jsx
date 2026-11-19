@@ -27,7 +27,8 @@ import {
   MapPin,
   ExternalLink,
   X,
-  Navigation
+  Navigation,
+  Search
 } from 'lucide-react';
 
 const COMMON_EMOJIS = ['👋', '✨', '💖', '🔥', '🎉', '⚔️', '🎭', '📸', '💯', '🙏', '👍', '😊'];
@@ -41,9 +42,26 @@ const COSPLAY_STICKERS = [
   { id: 'budget', icon: '💸', label: 'RIP Wallet', bg: 'from-red-500/20 to-orange-500/20 border-red-500/40 text-red-200' },
 ];
 
-// Helper to compress images so they fit cleanly within Firestore's 1MB document limit
-const compressImage = (file, maxWidth = 720, quality = 0.7) =>
+const CURATED_GIFS = [
+  { id: 'g1', title: 'Anime Hype', url: 'https://media.tenor.com/2roX3uxz_68AAAAM/anime-excited.gif' },
+  { id: 'g2', title: 'Sewing Crunch', url: 'https://media.tenor.com/8v1q8x2_2zEAAAAM/sewing-anime.gif' },
+  { id: 'g3', title: 'Sparkle Slay', url: 'https://media.tenor.com/1i_6O1Z2z8MAAAAM/anime-sparkle.gif' },
+  { id: 'g4', title: 'Pose Photoshoot', url: 'https://media.tenor.com/5k9-4Z8x1p0AAAAM/anime-pose.gif' },
+  { id: 'g5', title: 'RIP Wallet', url: 'https://media.tenor.com/9x2-1Z7y3q4AAAAM/empty-wallet.gif' },
+  { id: 'g6', title: 'Cheers Con', url: 'https://media.tenor.com/3m8-7X5w9r2AAAAM/anime-cheers.gif' },
+];
+
+// Compress local images so they fit cleanly within Firestore's 1MB limit
+const compressImage = (file, maxWidth = 720, quality = 0.72) =>
   new Promise((resolve, reject) => {
+    if (file.type === 'image/gif' && file.size <= 750 * 1024) {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
@@ -63,15 +81,58 @@ const compressImage = (file, maxWidth = 720, quality = 0.7) =>
     reader.readAsDataURL(file);
   });
 
+// Detect pasted YouTube, GIF, Image, or Direct Video URLs
+const parseMediaLink = (text) => {
+  const trimmed = text.trim();
+  if (!/^https?:\/\/\S+$/i.test(trimmed)) return null;
+
+  const ytMatch = trimmed.match(
+    /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+  );
+  if (ytMatch) {
+    return {
+      type: 'youtube',
+      mediaUrl: `https://www.youtube.com/embed/${ytMatch[1]}`,
+      text: trimmed,
+    };
+  }
+
+  if (/\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(trimmed)) {
+    return {
+      type: 'video',
+      mediaUrl: trimmed,
+      text: trimmed,
+    };
+  }
+
+  if (
+    /\.(gif|png|jpe?g|webp|avif)(\?.*)?$/i.test(trimmed) ||
+    /media\.tenor\.com|c\.tenor\.com|media\d*\.giphy\.com|i\.giphy\.com/i.test(trimmed)
+  ) {
+    return {
+      type: 'image',
+      mediaUrl: trimmed,
+      text: trimmed,
+    };
+  }
+
+  return null;
+};
+
 export default function CosplayChat() {
   const [currentUser, setCurrentUser] = useState(auth.currentUser);
   const [messages, setMessages] = useState([]);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [pickerTab, setPickerTab] = useState('emoji');
+  const [pickerTab, setPickerTab] = useState('emoji'); // 'emoji' | 'sticker' | 'gif'
   const [showOnlineList, setShowOnlineList] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState({});
+
+  // GIF Search State
+  const [gifQuery, setGifQuery] = useState('anime cosplay');
+  const [gifResults, setGifResults] = useState(CURATED_GIFS);
+  const [isSearchingGifs, setIsSearchingGifs] = useState(false);
 
   // Location Modal State
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -98,6 +159,43 @@ export default function CosplayChat() {
     });
     return () => unsubscribeAuth();
   }, []);
+
+  // Fetch GIFs from Tenor when GIF tab is open or search query changes
+  useEffect(() => {
+    if (!showEmojiPicker || pickerTab !== 'gif') return;
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      const term = gifQuery.trim() || 'anime cosplay';
+      setIsSearchingGifs(true);
+      try {
+        const res = await fetch(
+          `https://g.tenor.com/v1/search?q=${encodeURIComponent(term)}&key=LIVDSRZULELA&limit=12&media_filter=minimal`,
+          { signal: controller.signal }
+        );
+        const data = await res.json();
+        if (Array.isArray(data.results) && data.results.length > 0) {
+          const mapped = data.results.map((item) => ({
+            id: item.id,
+            title: item.content_description || term,
+            url: item.media?.[0]?.tinygif?.url || item.media?.[0]?.gif?.url,
+          })).filter((g) => g.url);
+          if (mapped.length > 0) setGifResults(mapped);
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          setGifResults(CURATED_GIFS);
+        }
+      } finally {
+        setIsSearchingGifs(false);
+      }
+    }, 350);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [showEmojiPicker, pickerTab, gifQuery]);
 
   // Helper function to switch channels cleanly without cascading state issues
   const handleSelectUserDM = (userToDM) => {
@@ -243,8 +341,14 @@ export default function CosplayChat() {
     setNewMessage('');
     setShowEmojiPicker(false);
 
+    const parsedMedia = parseMediaLink(messageText);
+
     try {
-      await sendPayload({ type: 'text', text: messageText });
+      if (parsedMedia) {
+        await sendPayload(parsedMedia);
+      } else {
+        await sendPayload({ type: 'text', text: messageText });
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       setNewMessage(messageText);
@@ -266,43 +370,43 @@ export default function CosplayChat() {
     }
   };
 
-  // Handle Photo or Video Upload
+  const handleSendGif = async (gif) => {
+    if (!currentUser || !gif?.url) return;
+    setShowEmojiPicker(false);
+
+    try {
+      await sendPayload({
+        type: 'image',
+        mediaUrl: gif.url,
+        text: `🎞️ GIF: ${gif.title || 'GIF'}`,
+      });
+    } catch (error) {
+      console.error('Error sending GIF:', error);
+    }
+  };
+
+  // Local Photo / GIF Upload
   const handleMediaSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !currentUser) return;
-    e.target.value = ''; // Reset input so same file can be chosen again
+    e.target.value = '';
+
+    if (!file.type.startsWith('image/')) {
+      alert('For long videos, paste any YouTube, Google Drive, or direct .mp4 link right into the message box!');
+      return;
+    }
 
     setIsUploadingMedia(true);
     try {
-      if (file.type.startsWith('image/')) {
-        const compressedDataUrl = await compressImage(file);
-        await sendPayload({
-          type: 'image',
-          mediaUrl: compressedDataUrl,
-          text: '📷 Shared a photo',
-        });
-      } else if (file.type.startsWith('video/')) {
-        // Keep video files under ~700KB for direct Firestore storage
-        if (file.size > 700 * 1024) {
-          alert('Please select a short video clip under 700KB (or paste a YouTube/video link in the chat).');
-          setIsUploadingMedia(false);
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-          await sendPayload({
-            type: 'video',
-            mediaUrl: ev.target.result,
-            text: '🎥 Shared a video',
-          });
-          setIsUploadingMedia(false);
-        };
-        reader.readAsDataURL(file);
-        return;
-      }
+      const compressedDataUrl = await compressImage(file);
+      await sendPayload({
+        type: 'image',
+        mediaUrl: compressedDataUrl,
+        text: '📷 Shared a photo',
+      });
     } catch (error) {
-      console.error('Error uploading media:', error);
-      alert('Failed to send media. Please try a smaller file.');
+      console.error('Error uploading image:', error);
+      alert('Failed to send photo. Please try a smaller image.');
     }
     setIsUploadingMedia(false);
   };
@@ -520,7 +624,7 @@ export default function CosplayChat() {
                   )}
                 </button>
 
-                {/* Message Bubble / Sticker / Image / Video / Venue Location */}
+                {/* Message Bubble / Sticker / Image / GIF / Video / YouTube / Venue */}
                 <div className="flex flex-col">
                   <span className={`text-[9px] text-slate-400 mb-0.5 px-1 ${isMe ? 'text-right' : 'text-left'}`}>
                     {msg.displayName}
@@ -536,20 +640,31 @@ export default function CosplayChat() {
                       </span>
                     </div>
                   ) : msg.type === 'image' && msg.mediaUrl ? (
-                    <div className="rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 max-w-[210px] shadow-md">
+                    <div className="rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 max-w-[215px] shadow-md">
                       <img
                         src={msg.mediaUrl}
-                        alt="Shared cosplay"
+                        alt="Shared media"
                         className="w-full h-auto max-h-48 object-cover cursor-pointer"
                         onClick={() => window.open(msg.mediaUrl, '_blank')}
                       />
                     </div>
                   ) : msg.type === 'video' && msg.mediaUrl ? (
-                    <div className="rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 max-w-[220px] shadow-md">
+                    <div className="rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 max-w-[230px] shadow-md">
                       <video
                         src={msg.mediaUrl}
                         controls
-                        className="w-full max-h-48 object-cover"
+                        preload="metadata"
+                        className="w-full max-h-52 object-cover"
+                      />
+                    </div>
+                  ) : msg.type === 'youtube' && msg.mediaUrl ? (
+                    <div className="rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 w-[230px] aspect-video shadow-md">
+                      <iframe
+                        src={msg.mediaUrl}
+                        title="Embedded video"
+                        className="w-full h-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
                       />
                     </div>
                   ) : msg.type === 'location' ? (
@@ -655,9 +770,9 @@ export default function CosplayChat() {
         </div>
       )}
 
-      {/* Emoji & Sticker Picker Window */}
+      {/* Emoji, Sticker & GIF Search Picker Window */}
       {showEmojiPicker && (
-        <div className="absolute bottom-12 left-2 z-30 bg-slate-950 border border-slate-800 rounded-xl p-2 shadow-2xl w-[245px]">
+        <div className="absolute bottom-12 left-2 z-30 bg-slate-950 border border-slate-800 rounded-xl p-2 shadow-2xl w-[265px]">
           <div className="flex items-center gap-1 mb-2 pb-1.5 border-b border-slate-800">
             <button
               type="button"
@@ -677,6 +792,15 @@ export default function CosplayChat() {
             >
               <Sticker className="w-3 h-3" /> Stickers
             </button>
+            <button
+              type="button"
+              onClick={() => setPickerTab('gif')}
+              className={`flex-1 py-1 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition ${
+                pickerTab === 'gif' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:bg-slate-900'
+              }`}
+            >
+              <Search className="w-3 h-3" /> GIFs
+            </button>
           </div>
 
           {pickerTab === 'emoji' ? (
@@ -692,7 +816,7 @@ export default function CosplayChat() {
                 </button>
               ))}
             </div>
-          ) : (
+          ) : pickerTab === 'sticker' ? (
             <div className="grid grid-cols-2 gap-1.5">
               {COSPLAY_STICKERS.map((sticker) => (
                 <button
@@ -706,15 +830,52 @@ export default function CosplayChat() {
                 </button>
               ))}
             </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="w-3 h-3 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search Tenor GIFs..."
+                  value={gifQuery}
+                  onChange={(e) => setGifQuery(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-7 pr-2 py-1 text-[11px] text-slate-100 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              {isSearchingGifs ? (
+                <div className="text-center text-[10px] text-slate-400 py-6">
+                  Searching GIFs...
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-1.5 max-h-[175px] overflow-y-auto pr-0.5">
+                  {gifResults.map((gif) => (
+                    <button
+                      key={gif.id}
+                      type="button"
+                      onClick={() => handleSendGif(gif)}
+                      className="rounded-lg overflow-hidden border border-slate-800 hover:border-amber-500 bg-slate-900 transition h-20 group relative"
+                      title={gif.title}
+                    >
+                      <img
+                        src={gif.url}
+                        alt={gif.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
 
-      {/* Hidden File Input for Photos & Videos */}
+      {/* Hidden File Input for Local Photos & GIFs */}
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*,video/*"
+        accept="image/*"
         onChange={handleMediaSelect}
         className="hidden"
       />
@@ -729,7 +890,7 @@ export default function CosplayChat() {
             setShowLocationModal(false);
           }}
           className="text-slate-400 hover:text-amber-400 p-1.5 hover:bg-slate-800 rounded-xl transition shrink-0 disabled:opacity-50"
-          title="Emojis & Stickers"
+          title="Emojis, Stickers & GIFs"
         >
           <Smile className="w-4 h-4" />
         </button>
@@ -739,7 +900,7 @@ export default function CosplayChat() {
           disabled={!currentUser || isUploadingMedia}
           onClick={() => fileInputRef.current?.click()}
           className="text-slate-400 hover:text-amber-400 p-1.5 hover:bg-slate-800 rounded-xl transition shrink-0 disabled:opacity-50"
-          title="Send Photo or Short Video"
+          title="Upload Photo or GIF"
         >
           <ImagePlus className="w-4 h-4" />
         </button>
@@ -759,15 +920,15 @@ export default function CosplayChat() {
 
         <input
           type="text"
-          disabled={!currentUser}
+          disabled={!currentUser || isUploadingMedia}
           placeholder={
             isUploadingMedia
-              ? "Uploading media..."
+              ? "Sending photo..."
               : !currentUser 
               ? "Sign in to chat..." 
               : activeDMUser 
               ? `DMing ${activeDMUser.displayName}...` 
-              : "Type a message..."
+              : "Message or paste video/GIF link..."
           }
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
