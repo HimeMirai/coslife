@@ -12,6 +12,7 @@ import {
   setDoc,
   deleteDoc,
 } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import { Send, MessageSquare, User, ShieldCheck, Smile, Users, ArrowLeft, Circle, Sticker } from 'lucide-react';
 
 const COMMON_EMOJIS = ['👋', '✨', '💖', '🔥', '🎉', '⚔️', '🎭', '📸', '💯', '🙏', '👍', '😊'];
@@ -26,6 +27,7 @@ const COSPLAY_STICKERS = [
 ];
 
 export default function CosplayChat() {
+  const [currentUser, setCurrentUser] = useState(auth.currentUser);
   const [messages, setMessages] = useState([]);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [newMessage, setNewMessage] = useState('');
@@ -39,11 +41,18 @@ export default function CosplayChat() {
 
   const messagesEndRef = useRef(null);
   const latestDMIdsRef = useRef({});
-  const currentUser = auth.currentUser;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  // Track Firebase Auth state reliably
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribeAuth();
+  }, []);
 
   // Helper function to switch channels cleanly without cascading state issues
   const handleSelectUserDM = (userToDM) => {
@@ -70,6 +79,7 @@ export default function CosplayChat() {
         uid: currentUser.uid,
         displayName: currentUser.displayName || 'Anonymous Cosplayer',
         photoURL: currentUser.photoURL || '',
+        online: true,
         lastSeen: serverTimestamp()
       }, { merge: true });
     };
@@ -79,21 +89,15 @@ export default function CosplayChat() {
     };
 
     markOnline();
-    const heartbeat = setInterval(markOnline, 60000);
+    const heartbeat = setInterval(markOnline, 30000);
     window.addEventListener('beforeunload', markOffline);
 
-    // Listen for online users & filter stale sessions (> 5 mins)
+    // Listen for ALL online users in the system without dropping them due to clock skew
     const qOnline = query(collection(db, 'online_users'));
     const unsubscribeOnline = onSnapshot(qOnline, (snapshot) => {
-      const now = Date.now();
       const users = snapshot.docs
-        .map((d) => d.data())
-        .filter((u) => {
-          if (u.uid === currentUser.uid) return true;
-          if (!u.lastSeen) return true;
-          const lastSeenMs = u.lastSeen.toMillis ? u.lastSeen.toMillis() : now;
-          return now - lastSeenMs < 5 * 60 * 1000;
-        });
+        .map((d) => ({ uid: d.id, ...d.data() }))
+        .filter((u) => u.uid && u.displayName);
       setOnlineUsers(users);
     });
 
@@ -308,7 +312,7 @@ export default function CosplayChat() {
           <Circle className="w-1.5 h-1.5 text-emerald-400 fill-emerald-400" /> Online:
         </span>
         {onlineUsers.length === 0 ? (
-          <span className="text-[10px] text-slate-500">No other cosplayers online</span>
+          <span className="text-[10px] text-slate-500">No cosplayers online</span>
         ) : (
           onlineUsers.map((u) => {
             const isMe = u.uid === currentUser?.uid;
