@@ -539,12 +539,15 @@ export default function CosplayChat({ initialDMUser = null }) {
   };
 
   const totalUnread = Object.values(unreadCounts).reduce((sum, n) => sum + n, 0);
+  const liveActiveDMUser = activeDMUser
+    ? onlineUsers.find((u) => u.uid === activeDMUser.uid) || activeDMUser
+    : null;
 
   return (
     <div className="w-full h-full bg-slate-900 flex flex-col justify-between overflow-hidden relative">
       {/* Top Main Header */}
       <div className="p-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-        {activeDMUser ? (
+        {liveActiveDMUser ? (
           <div className="flex items-center gap-2">
             <button
               onClick={() => handleSelectUserDM(null)}
@@ -554,13 +557,13 @@ export default function CosplayChat({ initialDMUser = null }) {
               <ArrowLeft className="w-4 h-4" />
             </button>
             <img
-              src={activeDMUser.photoURL || 'https://api.dicebear.com/7.x/bottts/svg?seed=Cosplayer1'}
+              src={liveActiveDMUser.photoURL || 'https://api.dicebear.com/7.x/bottts/svg?seed=Cosplayer1'}
               alt="Avatar"
               className="w-5 h-5 rounded-full object-cover border border-amber-500/50"
             />
             <div>
               <h2 className="text-xs font-bold text-slate-100 flex items-center gap-1">
-                {activeDMUser.displayName}
+                {liveActiveDMUser.displayName}
               </h2>
               <p className="text-[9px] text-amber-400 font-semibold">Private DM</p>
             </div>
@@ -682,13 +685,18 @@ export default function CosplayChat({ initialDMUser = null }) {
           </div>
         ) : messages.length === 0 ? (
           <div className="text-center text-slate-500 text-xs py-10">
-            {activeDMUser 
-              ? `This is the start of your private conversation with ${activeDMUser.displayName}. 👋` 
+            {liveActiveDMUser 
+              ? `This is the start of your private conversation with ${liveActiveDMUser.displayName}. 👋` 
               : 'No messages yet. Say hi to the community! 👋'}
           </div>
         ) : (
           messages.map((msg) => {
             const isMe = msg.uid === currentUser?.uid;
+            const liveProfile = isMe
+              ? currentUser
+              : onlineUsers.find((u) => u.uid === msg.uid);
+            const senderAvatar = liveProfile?.photoURL || msg.photoURL;
+            const senderName = liveProfile?.displayName || msg.displayName;
             const stickerObj = msg.type === 'sticker'
               ? COSPLAY_STICKERS.find((s) => s.id === msg.stickerId)
               : null;
@@ -703,14 +711,14 @@ export default function CosplayChat({ initialDMUser = null }) {
                 {/* Avatar with DM action */}
                 <button
                   disabled={isMe}
-                  onClick={() => handleSelectUserDM({ uid: msg.uid, displayName: msg.displayName, photoURL: msg.photoURL })}
+                  onClick={() => handleSelectUserDM({ uid: msg.uid, displayName: senderName, photoURL: senderAvatar })}
                   className={`relative shrink-0 ${!isMe ? 'hover:opacity-80 transition cursor-pointer' : 'cursor-default'}`}
-                  title={!isMe ? `Open DM with ${msg.displayName}` : ''}
+                  title={!isMe ? `Open DM with ${senderName}` : ''}
                 >
-                  {msg.photoURL ? (
+                  {senderAvatar ? (
                     <img
-                      src={msg.photoURL}
-                      alt={msg.displayName}
+                      src={senderAvatar}
+                      alt={senderName}
                       className="w-6 h-6 rounded-full border border-slate-700 mt-1 object-cover"
                     />
                   ) : (
@@ -723,7 +731,7 @@ export default function CosplayChat({ initialDMUser = null }) {
                 {/* Message Bubble / Sticker / Image / GIF / Video / YouTube / Venue */}
                 <div className="flex flex-col">
                   <span className={`text-[9px] text-slate-400 mb-0.5 px-1 ${isMe ? 'text-right' : 'text-left'}`}>
-                    {msg.displayName}
+                    {senderName}
                   </span>
 
                   {stickerObj ? (
@@ -1022,8 +1030,8 @@ export default function CosplayChat({ initialDMUser = null }) {
               ? (uploadStatusText || "Uploading media...")
               : !currentUser 
               ? "Sign in to chat..." 
-              : activeDMUser 
-              ? `DMing ${activeDMUser.displayName}...` 
+              : liveActiveDMUser 
+              ? `DMing ${liveActiveDMUser.displayName}...` 
               : "Message or paste video/GIF link..."
           }
           value={newMessage}
