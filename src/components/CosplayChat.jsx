@@ -122,7 +122,7 @@ const parseMediaLink = (text) => {
   return null;
 };
 
-export default function CosplayChat() {
+export default function CosplayChat({ initialDMUser = null }) {
   const [currentUser, setCurrentUser] = useState(auth.currentUser);
   const [messages, setMessages] = useState([]);
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -147,7 +147,7 @@ export default function CosplayChat() {
   const [uploadProgress, setUploadProgress] = useState(0);
   
   // DM state: null = Global Chat, otherwise target user object { uid, displayName, photoURL }
-  const [activeDMUser, setActiveDMUser] = useState(null);
+  const [activeDMUser, setActiveDMUser] = useState(initialDMUser);
 
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
