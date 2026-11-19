@@ -31,6 +31,9 @@ import {
   Search
 } from 'lucide-react';
 
+const CLOUDINARY_CLOUD_NAME = 'nqta4cz9';
+const CLOUDINARY_UPLOAD_PRESET = 'coslife_uploads';
+
 const COMMON_EMOJIS = ['👋', '✨', '💖', '🔥', '🎉', '⚔️', '🎭', '📸', '💯', '🙏', '👍', '😊'];
 
 const COSPLAY_STICKERS = [
@@ -140,6 +143,8 @@ export default function CosplayChat() {
   const [venueNotes, setVenueNotes] = useState('');
   const [isLocating, setIsLocating] = useState(false);
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [uploadStatusText, setUploadStatusText] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
   
   // DM state: null = Global Chat, otherwise target user object { uid, displayName, photoURL }
   const [activeDMUser, setActiveDMUser] = useState(null);
@@ -385,30 +390,86 @@ export default function CosplayChat() {
     }
   };
 
-  // Local Photo / GIF Upload
+  // Local Photo, GIF & Long Video Upload (up to 100MB via Cloudinary)
   const handleMediaSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !currentUser) return;
     e.target.value = '';
 
-    if (!file.type.startsWith('image/')) {
-      alert('For long videos, paste any YouTube, Google Drive, or direct .mp4 link right into the message box!');
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+
+    if (!isImage && !isVideo) {
+      alert('Please select a valid photo, GIF, or video file.');
+      return;
+    }
+
+    if (file.size > 100 * 1024 * 1024) {
+      alert('File size must be under 100MB.');
       return;
     }
 
     setIsUploadingMedia(true);
-    try {
-      const compressedDataUrl = await compressImage(file);
-      await sendPayload({
-        type: 'image',
-        mediaUrl: compressedDataUrl,
-        text: '📷 Shared a photo',
-      });
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      alert('Failed to send photo. Please try a smaller image.');
-    }
-    setIsUploadingMedia(false);
+    setUploadProgress(0);
+    setUploadStatusText(isVideo ? 'Uploading video...' : 'Uploading photo...');
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+    const resourceType = isVideo ? 'video' : 'image';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const pct = Math.round((event.loaded / event.total) * 100);
+        setUploadProgress(pct);
+        setUploadStatusText(`${isVideo ? 'Uploading video' : 'Uploading photo'} (${pct}%)...`);
+      }
+    };
+
+    xhr.onload = async () => {
+      try {
+        const res = JSON.parse(xhr.responseText);
+        if (!res.secure_url) throw new Error(res.error?.message || 'Upload failed');
+
+        await sendPayload({
+          type: isVideo ? 'video' : 'image',
+          mediaUrl: res.secure_url,
+          text: isVideo ? '🎥 Shared a video' : '📷 Shared a photo',
+        });
+      } catch (error) {
+        console.error('Error uploading media:', error);
+        if (isImage) {
+          try {
+            const compressedDataUrl = await compressImage(file);
+            await sendPayload({
+              type: 'image',
+              mediaUrl: compressedDataUrl,
+              text: '📷 Shared a photo',
+            });
+          } catch {
+            alert('Failed to send photo. Please try a smaller image.');
+          }
+        } else {
+          alert('Video upload failed: ' + error.message);
+        }
+      } finally {
+        setIsUploadingMedia(false);
+        setUploadStatusText('');
+        setUploadProgress(0);
+      }
+    };
+
+    xhr.onerror = () => {
+      alert('Network error during upload.');
+      setIsUploadingMedia(false);
+      setUploadStatusText('');
+      setUploadProgress(0);
+    };
+
+    xhr.send(formData);
   };
 
   // Send Venue Location (Manual or GPS)
@@ -576,6 +637,22 @@ export default function CosplayChat() {
           })
         )}
       </div>
+
+      {/* Upload Progress Bar */}
+      {isUploadingMedia && (
+        <div className="bg-slate-950 px-3 py-1.5 border-b border-slate-800">
+          <div className="flex items-center justify-between text-[10px] text-amber-400 font-semibold mb-1">
+            <span>{uploadStatusText}</span>
+            <span>{uploadProgress}%</span>
+          </div>
+          <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-amber-500 transition-all duration-200"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Messages Feed */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-900/50">
@@ -871,11 +948,11 @@ export default function CosplayChat() {
         </div>
       )}
 
-      {/* Hidden File Input for Local Photos & GIFs */}
+      {/* Hidden File Input for Local Photos, GIFs & Videos */}
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         onChange={handleMediaSelect}
         className="hidden"
       />
@@ -900,7 +977,7 @@ export default function CosplayChat() {
           disabled={!currentUser || isUploadingMedia}
           onClick={() => fileInputRef.current?.click()}
           className="text-slate-400 hover:text-amber-400 p-1.5 hover:bg-slate-800 rounded-xl transition shrink-0 disabled:opacity-50"
-          title="Upload Photo or GIF"
+          title="Upload Photo, GIF, or Video"
         >
           <ImagePlus className="w-4 h-4" />
         </button>
@@ -923,7 +1000,7 @@ export default function CosplayChat() {
           disabled={!currentUser || isUploadingMedia}
           placeholder={
             isUploadingMedia
-              ? "Sending photo..."
+              ? (uploadStatusText || "Uploading media...")
               : !currentUser 
               ? "Sign in to chat..." 
               : activeDMUser 
