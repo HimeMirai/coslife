@@ -592,51 +592,70 @@ export default function CosplayChat() {
         </button>
       </div>
 
-      {/* ONLINE MEMBERS CAROUSEL / LIST BAR */}
-      <div className="bg-slate-950/80 border-b border-slate-800 px-3 py-1.5 flex items-center gap-2 overflow-x-auto">
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
-          <Circle className="w-1.5 h-1.5 text-emerald-400 fill-emerald-400" /> Online:
-        </span>
-        {onlineUsers.length === 0 ? (
-          <span className="text-[10px] text-slate-500">No other cosplayers online</span>
-        ) : (
-          onlineUsers.map((u) => {
-            const isMe = u.uid === currentUser?.uid;
-            const unread = unreadCounts[u.uid] || 0;
-            return (
-              <button
-                key={u.uid}
-                disabled={isMe}
-                onClick={() => handleSelectUserDM(u)}
-                className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition shrink-0 ${
-                  activeDMUser?.uid === u.uid
-                    ? 'bg-amber-500/20 border-amber-500 text-amber-300'
-                    : isMe
-                    ? 'bg-slate-900/50 border-slate-800 text-slate-400 cursor-default'
-                    : unread > 0
-                    ? 'bg-amber-500/15 border-amber-400 text-amber-200'
-                    : 'bg-slate-900 border-slate-800 text-slate-200 hover:border-amber-500/50 hover:text-white'
-                }`}
-                title={!isMe ? `Start DM with ${u.displayName}` : 'You'}
-              >
-                <img
-                  src={u.photoURL || 'https://api.dicebear.com/7.x/bottts/svg?seed=Cosplayer1'}
-                  alt=""
-                  className="w-4 h-4 rounded-full object-cover"
-                />
-                <span className="text-[10px] font-medium truncate max-w-[90px]">
-                  {u.displayName} {isMe && '(You)'}
-                </span>
-                {unread > 0 && (
-                  <span className="bg-amber-500 text-slate-950 text-[9px] font-extrabold px-1.5 rounded-full">
-                    {unread}
-                  </span>
-                )}
-              </button>
-            );
-          })
-        )}
-      </div>
+      {/* Online Members Dropdown Panel (triggered by the group + green dot button) */}
+      {showOnlineList && (
+        <div className="absolute right-2 top-12 z-30 w-64 bg-slate-950 border border-slate-800 rounded-xl p-2.5 shadow-2xl">
+          <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-800">
+            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Circle className="w-2 h-2 text-emerald-400 fill-emerald-400 animate-pulse" />
+              Online Cosplayers ({onlineUsers.length})
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowOnlineList(false)}
+              className="text-slate-400 hover:text-white"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="max-h-56 overflow-y-auto space-y-1">
+            {onlineUsers.length === 0 ? (
+              <p className="text-[10px] text-slate-500 py-2 text-center">No cosplayers online</p>
+            ) : (
+              onlineUsers.map((u) => {
+                const isMe = u.uid === currentUser?.uid;
+                const unread = unreadCounts[u.uid] || 0;
+                return (
+                  <button
+                    key={u.uid}
+                    disabled={isMe}
+                    onClick={() => handleSelectUserDM(u)}
+                    className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg border transition text-left ${
+                      activeDMUser?.uid === u.uid
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                        : isMe
+                        ? 'bg-slate-900/50 border-slate-800 text-slate-400 cursor-default'
+                        : unread > 0
+                        ? 'bg-amber-500/15 border-amber-400 text-amber-200'
+                        : 'bg-slate-900 border-slate-800 text-slate-200 hover:border-amber-500/50 hover:text-white'
+                    }`}
+                    title={!isMe ? `Start DM with ${u.displayName}` : 'You'}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <img
+                        src={u.photoURL || 'https://api.dicebear.com/7.x/bottts/svg?seed=Cosplayer1'}
+                        alt=""
+                        className="w-5 h-5 rounded-full object-cover shrink-0"
+                      />
+                      <span className="text-[11px] font-medium truncate">
+                        {u.displayName} {isMe && '(You)'}
+                      </span>
+                    </div>
+                    {unread > 0 ? (
+                      <span className="bg-amber-500 text-slate-950 text-[9px] font-extrabold px-1.5 rounded-full shrink-0">
+                        {unread}
+                      </span>
+                    ) : !isMe ? (
+                      <span className="text-[9px] text-slate-500 shrink-0">DM</span>
+                    ) : null}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Upload Progress Bar */}
       {isUploadingMedia && (
