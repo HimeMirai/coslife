@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { X, Upload, Check, UserCircle2 } from 'lucide-react';
 import DataBackup from './DataBackup';
 
+const CLOUDINARY_CLOUD_NAME = 'nqta4cz9';
+const CLOUDINARY_UPLOAD_PRESET = 'coslife_uploads';
+
 const PRESET_AVATARS = [
   'https://api.dicebear.com/7.x/bottts/svg?seed=Cosplayer1',
   'https://api.dicebear.com/7.x/bottts/svg?seed=Cosplayer2',
@@ -16,15 +19,34 @@ const PRESET_AVATARS = [
 export default function ProfileModal({ isOpen, onClose, user, onUpdateProfile }) {
   const [selectedAvatar, setSelectedAvatar] = useState(user?.photoURL || PRESET_AVATARS[0]);
   const [displayName, setDisplayName] = useState(user?.displayName || 'Cosplayer');
+  const [isUploading, setIsUploading] = useState(false);
 
   if (!isOpen) return null;
 
-  // Handle local image file upload preview
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const imageUrl = URL.createObjectURL(file);
-      setSelectedAvatar(imageUrl);
+  // Upload custom avatar to Cloudinary so it persists permanently across sessions & chat
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!data.secure_url) throw new Error('Upload failed');
+
+      setSelectedAvatar(data.secure_url);
+    } catch {
+      alert('Avatar upload failed. Please try a smaller image.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -53,8 +75,9 @@ export default function ProfileModal({ isOpen, onClose, user, onUpdateProfile })
         <div className="flex flex-col items-center gap-4">
           <div className="relative group">
             <img 
-              src={selectedAvatar} 
+              src={selectedAvatar || PRESET_AVATARS[0]} 
               alt="Avatar Preview" 
+              onError={(e) => { e.currentTarget.src = PRESET_AVATARS[0]; }}
               className="w-24 h-24 rounded-full border-2 border-amber-500 object-cover shadow-lg bg-slate-950"
             />
           </div>
@@ -74,8 +97,8 @@ export default function ProfileModal({ isOpen, onClose, user, onUpdateProfile })
           <label className="text-xs text-slate-400 font-medium uppercase tracking-wider">Upload Custom Avatar</label>
           <label className="flex items-center justify-center gap-2 border border-dashed border-slate-700 hover:border-amber-500 bg-slate-950/50 hover:bg-slate-950 p-3 rounded-xl cursor-pointer text-sm text-slate-300 transition">
             <Upload className="w-4 h-4 text-amber-400" />
-            <span>Choose image file...</span>
-            <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+            <span>{isUploading ? 'Uploading avatar...' : 'Choose image file...'}</span>
+            <input type="file" accept="image/*" disabled={isUploading} onChange={handleImageUpload} className="hidden" />
           </label>
         </div>
 
@@ -117,9 +140,10 @@ export default function ProfileModal({ isOpen, onClose, user, onUpdateProfile })
           </button>
           <button 
             onClick={handleSave}
-            className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 py-2 rounded-xl text-sm font-bold transition"
+            disabled={isUploading}
+            className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 py-2 rounded-xl text-sm font-bold transition disabled:opacity-50"
           >
-            Save Profile
+            {isUploading ? 'Uploading...' : 'Save Profile'}
           </button>
         </div>
       </div>
