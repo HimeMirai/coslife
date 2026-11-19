@@ -7,10 +7,12 @@ import {
   MessageSquare,
   LogOut,
   Settings,
-  X
+  X,
+  Palette
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, updateProfile } from 'firebase/auth';
-import { auth, googleProvider } from './firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { auth, db, googleProvider } from './firebase';
 import CraftingStudio from './components/CraftingStudio';
 import PropScaler from './components/PropScaler';
 import BlueprintVault from './components/BlueprintVault';
@@ -20,9 +22,16 @@ import LoginForm from './components/LoginForm';
 import RegisterForm from './components/RegisterForm';
 import ConCompanion from './components/ConCompanion';
 import CosplayChat from './components/CosplayChat';
+import DashboardThemeModal from './components/DashboardThemeModal';
 
 // Brand logo asset
 import coslifeLogo from './assets/cos_logo.png'; 
+
+const DEFAULT_THEME = {
+  bgType: 'color',
+  bgValue: '#020617',
+  overlayOpacity: 0.65,
+};
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('studio');
@@ -35,6 +44,10 @@ export default function App() {
   // State for the Chat Pop-up Modal
   const [isChatOpen, setIsChatOpen] = useState(false);
 
+  // Dashboard Background Theme State
+  const [dashboardTheme, setDashboardTheme] = useState(DEFAULT_THEME);
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -42,6 +55,21 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Load user's saved dashboard background preferences from Firestore
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const unsubscribe = onSnapshot(doc(db, 'user_preferences', user.uid), (snap) => {
+      if (snap.exists()) {
+        setDashboardTheme((prev) => ({ ...prev, ...snap.data() }));
+      } else {
+        setDashboardTheme(DEFAULT_THEME);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
 
   const handleGoogleSignIn = async () => {
     try {
@@ -137,9 +165,19 @@ export default function App() {
     );
   }
 
+  const wrapperStyle =
+    dashboardTheme.bgType === 'image'
+      ? {
+          backgroundImage: `linear-gradient(rgba(2, 6, 23, ${dashboardTheme.overlayOpacity ?? 0.65}), rgba(2, 6, 23, ${dashboardTheme.overlayOpacity ?? 0.65})), url("${dashboardTheme.bgValue}")`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed',
+        }
+      : { background: dashboardTheme.bgValue };
+
   // ✅ LOGGED IN WORKSPACE
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans relative">
+    <div style={wrapperStyle} className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans relative transition-all duration-300">
       <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -150,6 +188,15 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsThemeModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/50 text-xs font-medium text-slate-200 hover:text-amber-400 transition"
+              title="Customize Dashboard Background"
+            >
+              <Palette className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Theme</span>
+            </button>
+
             <button 
               onClick={() => setIsProfileModalOpen(true)}
               className="flex items-center gap-2 hover:opacity-80 transition group"
@@ -266,6 +313,14 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {isThemeModalOpen && (
+        <DashboardThemeModal
+          currentTheme={dashboardTheme}
+          onPreviewChange={setDashboardTheme}
+          onClose={() => setIsThemeModalOpen(false)}
+        />
+      )}
 
       <ProfileModal 
         isOpen={isProfileModalOpen} 
